@@ -20,4 +20,12 @@ public class CardTest {
         Assert.assertEquals(card1, card2);
     }
 
+    @Test
+    public void testJokerConstruction() {
+        Card joker = new Card(Suit.JOKER, CardRank.JOKER);
+        Assert.assertTrue(joker.isJoker());
+        Assert.assertTrue(joker.isWild());
+        Assert.assertEquals(15, joker.getScoreValue());
+    }
+
 }

@@ -15,32 +15,21 @@ public class ComputerPlayer extends Player {
     @Override
     public void takeTurn(PlayPlate playPlate) {
 
-        boolean chooseFromDiscard = willCardBeUsed(playPlate.getDiscardCards().peek());
-        Card discardedCard = null;
-        if (chooseFromDiscard) {
+        boolean shouldTakeDiscard = wouldUseCard(playPlate.getDiscardCards().peek());
+        if (shouldTakeDiscard) {
             LousLogger.printRed("Choosing discard card " + playPlate.getDiscardCards().peek().prettyPrint(true));
-            Card discardCard = playPlate.getDiscardCards().pop();
-            discardCard.setBeingUsed(true);
-            getHand().getDeadwood().add(discardCard);
-            discardedCard = discard();
-            playPlate.getDiscardCards().push(discardedCard);
-            LousLogger.printRed("Discarded card " + discardedCard.prettyPrint(true));
+            discardAfterTakingCard(playPlate.getDiscardCards().pop(), playPlate);
         } else {
             Card drawCard = playPlate.drawFromDeck();
             LousLogger.printRed("Drawing from deck " + drawCard.prettyPrint(true) + (drawCard.isWild() ? "wild": ""));
-            boolean willBeUsed = willCardBeUsed(drawCard);
-            if (willBeUsed) {
+            boolean drawWillBeUsed = wouldUseCard(drawCard);
+            if (drawWillBeUsed) {
                 LousLogger.printRed("Will use " + drawCard.prettyPrint(true));
-                drawCard.setBeingUsed(true);
-                getHand().getDeadwood().add(drawCard);
-                discardedCard = discard();
-
-                playPlate.getDiscardCards().push(discardedCard);
-                LousLogger.printRed("Discarded card " + discardedCard.prettyPrint(true));
+                discardAfterTakingCard(drawCard, playPlate);
             } else {
                 LousLogger.printRed(Ansi.HIGH_INTENSITY+"Will not use draw card. Putting it in discard pile."+Ansi.RESET);
-                getHand().getDeadwood().removeIf(e -> e.prettyPrint(true).equals(drawCard.prettyPrint(true)));
                 playPlate.getDiscardCards().push(drawCard);
+                getHand().evaluateBestGrouping();
             }
         }
     }
@@ -71,19 +60,25 @@ public class ComputerPlayer extends Player {
         return discardCard;
     }
 
-    public boolean willCardBeUsed(Card card) {
+    private void discardAfterTakingCard(Card cardToKeep, PlayPlate playPlate) {
+        getHand().getDeadwood().add(cardToKeep);
+        getHand().evaluateBestGrouping();
+        Card discardedCard = discard();
+        playPlate.getDiscardCards().push(discardedCard);
+        LousLogger.printRed("Discarded card " + discardedCard.prettyPrint(true));
+    }
+
+    public boolean wouldUseCard(Card card) {
         getHand().getDeadwood().add(card);
-        getHand().createBestHand();
-        if (card.isBeingUsed()) {
-            if (RenderEngine.shouldRender())
-                System.out.println("Hand with card used:");
+        getHand().evaluateBestGrouping();
+        boolean used = card.isBeingUsed();
+        if (used && RenderEngine.shouldRender()) {
+            System.out.println("Hand with card used:");
             RenderEngine.renderHand(getHand());
-            getHand().getDeadwood().remove(card);
-            card.setBeingUsed(false);
-            return true;
         }
         getHand().getDeadwood().remove(card);
-        return false;
+        getHand().evaluateBestGrouping();
+        return used;
     }
 
 

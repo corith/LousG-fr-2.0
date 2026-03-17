@@ -11,6 +11,8 @@ import lombok.*;
 @NoArgsConstructor
 public class Card {
 
+    private static final int JOKER_SCORE = 15;
+
     private Suit suit;
     private CardRank cardRank;
     private int scoreValue = 0;
@@ -20,9 +22,13 @@ public class Card {
     public Card(Suit suit, CardRank cardRank) {
         this.suit = suit;
         this.cardRank = cardRank;
-        this.scoreValue = cardRank.getRank();
+        this.isWild = suit == Suit.JOKER || cardRank == CardRank.JOKER;
+        this.scoreValue = isWild ? JOKER_SCORE : cardRank.getRank();
     }
 
+    public boolean isJoker() {
+        return suit == Suit.JOKER || cardRank == CardRank.JOKER;
+    }
 
     @Override
     public String toString() {
@@ -34,6 +40,9 @@ public class Card {
     }
 
     public String prettyPrint(boolean showNumber) {
+        if (isJoker()) {
+            return Ansi.HIGH_INTENSITY + Ansi.BACKGROUND_MAGENTA + Ansi.WHITE + "JOKER" + Ansi.RESET;
+        }
         if (this.getCardRank().getRank() > 10 || this.getCardRank().getRank() == 1) {
             return Ansi.HIGH_INTENSITY+Ansi.BACKGROUND_BLACK+Ansi.GREEN + this.cardRank + " " + this.getSuit().getStyle();
         }

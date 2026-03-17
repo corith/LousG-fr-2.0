@@ -16,29 +16,33 @@ public class PlayPlate {
     CardDeck deck;
     Deque<Card> discardCards = new ArrayDeque<>();
 
-    private static int shuffleCount = 0;
+    private int shuffleCount = 0;
 
     public PlayPlate(CardDeck deck) {
         this.deck = deck;
-        shuffleCount = 0;
     }
 
     public Card drawFromDeck() {
-        return deck.cards.pop();
+        return deck.getTopCard();
     }
 
-    public void redistributeDiscards() {
-        deck.cards.addAll(discardCards);
-        discardCards = new ArrayDeque<>();
-        discardCards.add(deck.cards.pop());
-        shuffleCount+=1;
+    public boolean redistributeDiscards() {
+        if (discardCards.size() <= 1) {
+            return false;
+        }
+
+        Card topDiscard = discardCards.pop();
+        List<Card> cardsToRecycle = new ArrayList<>(discardCards);
+        Collections.shuffle(cardsToRecycle);
+
+        deck.cards.addAll(cardsToRecycle);
+        discardCards.clear();
+        discardCards.push(topDiscard);
+        shuffleCount += 1;
+        return true;
     }
 
     public void initializeDiscardPile() {
-        discardCards.add(deck.cards.pop());
-    }
-
-    public int getShuffleCount() {
-        return shuffleCount;
+        discardCards.push(deck.getTopCard());
     }
 }

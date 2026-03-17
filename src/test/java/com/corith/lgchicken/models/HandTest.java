@@ -30,7 +30,7 @@ public class HandTest {
         userPlayer.getHand().deadwood.add(c4);
         userPlayer.getHand().deadwood.add(c5);
         userPlayer.getHand().deadwood.add(c6);
-        userPlayer.getHand().createBestHand();
+        userPlayer.getHand().evaluateBestGrouping();
         RenderEngine.renderHand(userPlayer.getHand());
         Assert.assertEquals(0, userPlayer.getHand().getDeadWoodValue());
     }
@@ -44,7 +44,7 @@ public class HandTest {
         computer.getHand().deadwood.add(wild);
         computer.getHand().deadwood.add(new Card(Suit.SPADES, CardRank.SEVEN));
         computer.getHand().deadwood.add(new Card(Suit.SPADES, CardRank.EIGHT));
-        computer.getHand().createBestHand();
+        computer.getHand().evaluateBestGrouping();
         RenderEngine.renderHand(computer.getHand());
         Assert.assertEquals(0, computer.getHand().getDeadWoodValue());
     }
@@ -59,7 +59,7 @@ public class HandTest {
         computer.getHand().deadwood.add(new Card(Suit.SPADES, CardRank.SEVEN));
         computer.getHand().deadwood.add(new Card(Suit.SPADES, CardRank.SIX));
 
-        computer.getHand().createBestHand();
+        computer.getHand().evaluateBestGrouping();
         RenderEngine.renderHand(computer.getHand());
         Assert.assertEquals(0, computer.getHand().getDeadWoodValue());
     }
@@ -74,7 +74,7 @@ public class HandTest {
 //        computer.getHand().deadwood.add(wild);
         computer.getHand().deadwood.add(new Card(Suit.SPADES, CardRank.SEVEN));
         computer.getHand().deadwood.add(new Card(Suit.SPADES, CardRank.EIGHT));
-        computer.getHand().createBestHand();
+        computer.getHand().evaluateBestGrouping();
         Assert.assertEquals(0, computer.getHand().getDeadWoodValue());
     }
 
@@ -96,7 +96,7 @@ public class HandTest {
         userPlayer.getHand().deadwood.add(c4);
         userPlayer.getHand().deadwood.add(c5);
         userPlayer.getHand().deadwood.add(c6);
-        userPlayer.getHand().createBestHand();
+        userPlayer.getHand().evaluateBestGrouping();
         RenderEngine.renderHand(userPlayer.getHand());
         Assert.assertEquals(0, userPlayer.getHand().getDeadWoodValue());
     }
@@ -112,7 +112,7 @@ public class HandTest {
         userPlayer.getHand().deadwood.add(c1);
         userPlayer.getHand().deadwood.add(c2);
         userPlayer.getHand().deadwood.add(c6);
-        userPlayer.getHand().createBestHand();
+        userPlayer.getHand().evaluateBestGrouping();
         RenderEngine.renderHand(userPlayer.getHand());
         Assert.assertEquals(7, userPlayer.getHand().getDeadWoodValue());
     }
@@ -128,9 +128,29 @@ public class HandTest {
         userPlayer.getHand().deadwood.add(c0);
         userPlayer.getHand().deadwood.add(c1);
         userPlayer.getHand().deadwood.add(c2);
-        userPlayer.getHand().createBestHand();
+        userPlayer.getHand().evaluateBestGrouping();
         RenderEngine.renderHand(userPlayer.getHand());
         Assert.assertEquals(0, userPlayer.getHand().getDeadWoodValue());
+    }
+
+    @Test
+    public void testJokerCanBridgeRunGap() {
+        Player computer = new ComputerPlayer();
+        computer.getHand().deadwood.add(new Card(Suit.SPADES, CardRank.FIVE));
+        computer.getHand().deadwood.add(new Card(Suit.JOKER, CardRank.JOKER));
+        computer.getHand().deadwood.add(new Card(Suit.SPADES, CardRank.SEVEN));
+        computer.getHand().evaluateBestGrouping();
+        Assert.assertEquals(0, computer.getHand().getDeadWoodValue());
+    }
+
+    @Test
+    public void testThreeJokersCanFormAGroup() {
+        Player computer = new ComputerPlayer();
+        computer.getHand().deadwood.add(new Card(Suit.JOKER, CardRank.JOKER));
+        computer.getHand().deadwood.add(new Card(Suit.JOKER, CardRank.JOKER));
+        computer.getHand().deadwood.add(new Card(Suit.JOKER, CardRank.JOKER));
+        computer.getHand().evaluateBestGrouping();
+        Assert.assertEquals(0, computer.getHand().getDeadWoodValue());
     }
 
 }

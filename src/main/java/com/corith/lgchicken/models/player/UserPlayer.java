@@ -2,6 +2,7 @@ package com.corith.lgchicken.models.player;
 
 import com.corith.lgchicken.models.Card;
 import com.corith.lgchicken.models.PlayPlate;
+import com.corith.lgchicken.enums.Suit;
 import com.corith.lgchicken.utility.Ansi;
 import lombok.Getter;
 import lombok.Setter;
@@ -15,31 +16,27 @@ import java.util.regex.Pattern;
 @Getter
 @Setter
 public class UserPlayer extends Player {
-    private static Scanner scanner = new Scanner(System.in);
-    private static final String drawChar = "d";
-    private static final String discardChar = "p";
+    private static final Scanner scanner = new Scanner(System.in);
+    private static final String DRAW_COMMAND = "d";
+    private static final String TAKE_DISCARD_COMMAND = "p";
+    private static final String JOKER_TOKEN = "jk";
 
     @Override
     public void takeTurn(PlayPlate playPlate) {
-        // Show User their hand
-        // Ask user to if they want to draw or take from discard
-        System.out.println(Ansi.HIGH_INTENSITY+Ansi.MAGENTA+"Draw card ("+drawChar+") or pick ("+discardChar+") up from discard pile?"+Ansi.RESET);
+        System.out.println(Ansi.HIGH_INTENSITY+Ansi.MAGENTA+"Draw card ("+DRAW_COMMAND+") or pick ("+TAKE_DISCARD_COMMAND+") up from discard pile?"+Ansi.RESET);
         String choice;
         do {
             choice = scanner.nextLine();
-        } while (!choice.trim().equalsIgnoreCase(drawChar) && !choice.trim().equalsIgnoreCase(discardChar));
+        } while (!choice.trim().equalsIgnoreCase(DRAW_COMMAND) && !choice.trim().equalsIgnoreCase(TAKE_DISCARD_COMMAND));
 
-        if (choice.equalsIgnoreCase(drawChar)) {
-            // draw card from deck.
+        if (choice.equalsIgnoreCase(DRAW_COMMAND)) {
             Card drawCard = playPlate.drawFromDeck();
             System.out.println("Draw Card: " + drawCard.prettyPrint(true));
             getHand().getDeadwood().add(drawCard);
-        } else if (choice.equalsIgnoreCase(discardChar)) {
-            // take from discard pile.
+        } else if (choice.equalsIgnoreCase(TAKE_DISCARD_COMMAND)) {
             getHand().getDeadwood().add(playPlate.getDiscardCards().pop());
         }
 
-        // discard
         Card discardedCard = discard();
         playPlate.getDiscardCards().push(discardedCard);
         System.out.println(discardedCard.prettyPrint(true));
@@ -52,78 +49,88 @@ public class UserPlayer extends Player {
 
     @Override
     public Card discard() {
-        Card discardCard;
+        Card selectedCard;
         do {
             List<String> userInput = getUserInput("Which card do you want to discard?");
-            discardCard = getDiscardCardFromUserInput(userInput);
-        } while(discardCard == null);
-        getHand().getDeadwood().remove(discardCard);
-        return discardCard;
+            selectedCard = getDiscardCardFromUserInput(userInput);
+        } while(selectedCard == null);
+        getHand().getDeadwood().remove(selectedCard);
+        return selectedCard;
     }
 
     public List<String> getUserInput(String prompt) {
-        return getCardInput();
+        return getCardInput(prompt);
     }
 
     /**
-     * Validates and saves user input in the form of (1-13)(h,d,s,c).
+     * Validates and saves user input in the form of (1-13)(h,d,s,c) or jk for joker.
      * <p>
-     * Ex: 12h, 2d, 10s, etc.
+     * Ex: 12h, 2d, 10s, jk, etc.
      * @return [number, letter] (rank, suit).
      */
-    public static List<String> getCardInput() {
-        Scanner scanner = new Scanner(System.in);
+    public static List<String> getCardInput(String prompt) {
         List<String> result = new ArrayList<>();
 
-        System.out.println(Ansi.HIGH_INTENSITY+Ansi.MAGENTA+"Choose Discard."+Ansi.CYAN+"\nFormat:"+Ansi.RESET+" number (1-13) followed by a suit char (h, d, s, or c).\n"+Ansi.CYAN+"Ex: 7h, 12d, 1c, 3s"+Ansi.RESET);
+        System.out.println(Ansi.HIGH_INTENSITY + Ansi.MAGENTA + prompt + Ansi.CYAN + "\nFormat:" + Ansi.RESET + " number (1-13) followed by a suit char (h, d, s, or c), or jk for joker.\n" + Ansi.CYAN + "Ex: 7h, 12d, 1c, 3s, jk" + Ansi.RESET);
 
-        // Define the regex pattern to match the input format
         Pattern pattern = Pattern.compile("^(1[0-3]|[1-9])([hdsc])$");
 
         while (true) {
             String input = scanner.nextLine().trim();
+            if (input.equalsIgnoreCase(JOKER_TOKEN)) {
+                result.add("joker");
+                result.add("j");
+                break;
+            }
             Matcher matcher = pattern.matcher(input);
 
-            // Check if input matches the required format
             if (matcher.matches()) {
-                // Add number part and suit character to the result list
-                result.add(matcher.group(1)); // The number (1-13)
-                result.add(matcher.group(2)); // The suit character (h, d, s, c)
-                break; // Valid input received, exit the loop
+                result.add(matcher.group(1));
+                result.add(matcher.group(2));
+                break;
             } else {
-                System.out.println("Invalid input format. Please enter a number (1-13) followed by a single character (h, d, s, or c).");
+                System.out.println("Invalid input format. Please enter a number (1-13) followed by a single character (h, d, s, or c), or jk for joker.");
             }
         }
         return result;
     }
 
-    private Card getDiscardCardFromUserInput(List<String> input) {
-        String theChoice = "";
+    Card getDiscardCardFromUserInput(List<String> input) {
+        if ("j".equalsIgnoreCase(input.get(1))) {
+            for (Card card : getHand().getDeadwood()) {
+                if (card.getSuit() == Suit.JOKER || card.isJoker()) {
+                    return card;
+                }
+            }
+            return null;
+        }
+
+        String selectedSuitName = "";
 
         switch (input.get(1)) {
             case "h":
-                theChoice = "HEARTS";
+                selectedSuitName = "HEARTS";
                 break;
             case "d":
-                theChoice = "DIAMONDS";
+                selectedSuitName = "DIAMONDS";
                 break;
             case "s":
-                theChoice = "SPADES";
+                selectedSuitName = "SPADES";
                 break;
             case "c":
-                theChoice = "CLUBS";
+                selectedSuitName = "CLUBS";
                 break;
 
         }
-        Card cardToRemove = null;
+        Card selectedCard = null;
         for (Card card : getHand().getDeadwood()) {
-            if (card.getSuit().name().equals(theChoice)) {
+            if (card.getSuit().name().equals(selectedSuitName)) {
                 if (card.getCardRank().getRank() == Integer.parseInt(input.get(0))) {
                     System.out.println("Found chosen card");
-                    cardToRemove = card;
+                    selectedCard = card;
                 }
             }
         }
-        return cardToRemove;
+        return selectedCard;
     }
 }
