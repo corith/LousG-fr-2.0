@@ -1,6 +1,5 @@
 package com.corith.lgchicken.models;
 
-import com.corith.lgchicken.enums.CardRank;
 import com.corith.lgchicken.enums.GroupType;
 import com.corith.lgchicken.enums.Suit;
 import com.corith.lgchicken.utility.Ansi;
@@ -16,204 +15,302 @@ import java.util.stream.Collectors;
 @Setter
 @AllArgsConstructor
 public class Hand {
+    private static final int MIN_GROUP_SIZE = 3;
 
     public Hand() {
-       
     }
 
     List<Card> deadwood = new ArrayList<>();
     List<CardGroup> cardGroups = new ArrayList<>();
 
-    List<Card> hearts = new ArrayList<>();
-    List<Card> diamonds = new ArrayList<>();
-    List<Card> clubs = new ArrayList<>();
-    List<Card> spades = new ArrayList<>();
-    List<Card> wilds = new ArrayList<>();
+    List<Card> heartCards = new ArrayList<>();
+    List<Card> diamondCards = new ArrayList<>();
+    List<Card> clubCards = new ArrayList<>();
+    List<Card> spadeCards = new ArrayList<>();
+    List<Card> wildCards = new ArrayList<>();
 
     /**
-     * Goal: to minimize the amount of points in deadwood.
-     * <p>
-     * This method creates the best possible hand out of the cards in deadwood.
-     * It will  attempt to find all the runs, melds, and to distribute wild cards. Marking
-     * cards as "being used" when organizing them.
+     * Build the highest-value collection of runs and melds, then use any leftover
+     * wild cards in a valid group where possible.
      */
     public void createBestHand() {
-        organize();
-        cardGroups = findRuns(hearts);
-        cardGroups.addAll(findRuns(spades));
-        cardGroups.addAll(findRuns(diamonds));
-        cardGroups.addAll(findRuns(clubs));
-        cardGroups.addAll(findMelds(deadwood));
-        disperseWilds();
+        evaluateBestGrouping();
     }
 
-    public List<CardGroup> findRuns(List<Card> cards) {
-        List<CardGroup> theRuns = new ArrayList<>();
-        if (cards.size() < 3) {
-            return theRuns;
+    public void evaluateBestGrouping() {
+        organizeCards();
+        cardGroups = new ArrayList<>();
+
+        if (deadwood.isEmpty()) {
+            return;
         }
 
-        CardGroup group = new CardGroup(GroupType.RUN);
-        group.cards.add(cards.get(0));
-        CardRank previousRank = cards.get(0).getCardRank();
-
-        for (int i = 1; i < cards.size(); i++) {
-            Card currentCard = cards.get(i);
-            CardRank currentRank = currentCard.getCardRank();
-
-            if (currentRank.getRank() == previousRank.getRank() + 1) {
-                group.cards.add(currentCard);
-            } else {
-                if (group.cards.size() >= 3) {
-                    theRuns.add(group);
-                    for (Card card : group.cards) {
-                        card.setBeingUsed(true);
-                    }
-                }
-                // Start a new group
-                group = new CardGroup(GroupType.RUN);
-                group.cards.add(currentCard);
-            }
-            previousRank = currentRank;
-        }
-
-        // Handle the last group after the loop
-        if (group.cards.size() >= 3) {
-            theRuns.add(group);
-            for (Card card : group.cards) {
-                card.setBeingUsed(true);
-            }
-        }
-
-        return theRuns;
-    }
-
-    public List<CardGroup> findMelds(List<Card> cards) {
-        Map<Integer, CardGroup> rankGroups = new HashMap<>();
-        for (Card card : cards) {
-            if (card.isBeingUsed() || card.isWild()) {
-                // Skip cards that are used. Wilds too, b/c no reason to make a meld out of all wilds...
-                continue;
-            }
-            int rank = card.getCardRank().getRank();
-            CardGroup group = rankGroups.computeIfAbsent(rank, k -> new CardGroup(GroupType.MELD));
-            group.cards.add(card);
-        }
-
-        List<CardGroup> theMelds = new ArrayList<>();
-        for (CardGroup group : rankGroups.values()) {
-            if (group.cards.size() >= 3) {
-                for (Card card : group.cards) {
-                    card.setBeingUsed(true);
-                }
-                theMelds.add(group);
-            }
-        }
-        return theMelds;
-    }
-
-    public void disperseWilds() {
-        // Collect all unused, non-wild cards (deadwood)
-        List<Card> unusedNonWildCards = deadwood.stream()
-                .filter(card -> !card.isBeingUsed() && !card.isWild())
+        List<Card> nonWildCards = deadwood.stream()
+                .filter(card -> !card.isWild())
+                .sorted(Comparator.comparing(Card::getCardRank))
                 .collect(Collectors.toList());
 
-        List<CardGroup> candidateGroups = new ArrayList<>();
+        List<Card> availableWildCards = wildCards.stream()
+                .sorted(Comparator.comparingInt(Card::getScoreValue).reversed())
+                .collect(Collectors.toList());
 
-        // Find 'almost' runs for each suit
-        List<Suit> suits = Arrays.asList(Suit.HEARTS, Suit.DIAMONDS, Suit.CLUBS, Suit.SPADES);
-        for (Suit suit : suits) {
-            List<Card> suitCards = unusedNonWildCards.stream()
-                    .filter(card -> card.getSuit() == suit)
-                    .sorted(Comparator.comparingInt(card -> card.getCardRank().getRank()))
-                    .collect(Collectors.toList());
+        if (!nonWildCards.isEmpty()) {
+            List<GroupCandidate> groupCandidates = buildGroupCandidates(nonWildCards, availableWildCards.size());
+            SearchResult bestGrouping = findBestGrouping(nonWildCards, availableWildCards, groupCandidates);
+            applyGroupingResult(bestGrouping, nonWildCards, availableWildCards);
+        }
 
-            for (int i = 0; i < suitCards.size() - 1; i++) {
-                Card card1 = suitCards.get(i);
-                Card card2 = suitCards.get(i + 1);
+        placeUnusedWildCards(availableWildCards);
+    }
 
-                if (card2.getCardRank().getRank() == card1.getCardRank().getRank() + 1) {
-                    // Found an 'almost' run
-                    CardGroup group = new CardGroup(GroupType.RUN);
-                    group.cards.add(card1);
-                    group.cards.add(card2);
-                    group.points = card1.getCardRank().getRank() + card2.getCardRank().getRank();
-                    candidateGroups.add(group);
+    private List<GroupCandidate> buildGroupCandidates(List<Card> nonWildCards, int maxWildCount) {
+        List<GroupCandidate> groupCandidates = new ArrayList<>();
+        Set<String> seenCandidateKeys = new HashSet<>();
+        buildMeldCandidates(nonWildCards, maxWildCount, groupCandidates, seenCandidateKeys);
+        buildRunCandidates(nonWildCards, maxWildCount, groupCandidates, seenCandidateKeys);
+        groupCandidates.sort(Comparator.comparingInt(GroupCandidate::getCardScore).reversed());
+        return groupCandidates;
+    }
+
+    private void buildMeldCandidates(
+            List<Card> nonWildCards,
+            int maxWildCount,
+            List<GroupCandidate> candidates,
+            Set<String> seenCandidates
+    ) {
+        Map<Integer, List<Integer>> cardsByRank = new HashMap<>();
+        for (int i = 0; i < nonWildCards.size(); i++) {
+            int rank = nonWildCards.get(i).getCardRank().getRank();
+            cardsByRank.computeIfAbsent(rank, ignored -> new ArrayList<>()).add(i);
+        }
+
+        for (List<Integer> indices : cardsByRank.values()) {
+            int subsetLimit = 1 << indices.size();
+            for (int subset = 1; subset < subsetLimit; subset++) {
+                int cardMask = 0;
+                int cardScore = 0;
+                int cardCount = 0;
+
+                for (int bit = 0; bit < indices.size(); bit++) {
+                    if ((subset & (1 << bit)) == 0) {
+                        continue;
+                    }
+                    int cardIndex = indices.get(bit);
+                    cardMask |= 1 << cardIndex;
+                    cardScore += nonWildCards.get(cardIndex).getScoreValue();
+                    cardCount += 1;
                 }
-            }
-        }
 
-        // Find 'almost' melds
-        Map<Integer, List<Card>> rankGroups = unusedNonWildCards.stream()
-                .collect(Collectors.groupingBy(card -> card.getCardRank().getRank()));
-
-        for (Map.Entry<Integer, List<Card>> entry : rankGroups.entrySet()) {
-            List<Card> cardsOfSameRank = entry.getValue();
-            if (cardsOfSameRank.size() == 2) {
-                // Found an 'almost' meld
-                CardGroup group = new CardGroup(GroupType.MELD);
-                group.cards.addAll(cardsOfSameRank);
-                group.points = cardsOfSameRank.get(0).getCardRank().getRank() * 2; // sum of ranks
-                candidateGroups.add(group);
-            }
-        }
-
-        // Sort candidate groups by points in descending order
-        candidateGroups.sort((g1, g2) -> Integer.compare(g2.points, g1.points));
-
-        // Assign wild cards to the highest-pointed groups
-        Iterator<CardGroup> groupIterator = candidateGroups.iterator();
-        while (!wilds.isEmpty() && groupIterator.hasNext()) {
-            CardGroup group = groupIterator.next();
-            if (group.cards.stream().anyMatch(Card::isBeingUsed)) {
-                group.cards.removeIf(Card::isBeingUsed);
-            }
-            if (group.cards.size() == 2) {
-                // Assign a wild card
-                Card wildCard = wilds.remove(0);
-                group.cards.add(wildCard);
-                // Optionally, adjust points if wild cards have a score value
-                // group.points += wildCard.getCardRank().getRank();
-                // Mark cards as being used
-                for (Card card : group.cards) {
-                    card.setBeingUsed(true);
+                int wildNeeded = Math.max(0, MIN_GROUP_SIZE - cardCount);
+                if (wildNeeded > maxWildCount) {
+                    continue;
                 }
-                cardGroups.add(group);
-                // Remove the group from candidateGroups
-                groupIterator.remove();
 
-
+                addCandidate(candidates, seenCandidates, GroupType.MELD, cardMask, wildNeeded, cardScore);
             }
         }
+    }
 
-        // Takes care of unused wilds if any still remain.
-        for (Card card : wilds) {
-            if (!card.isBeingUsed()) {
+    private void buildRunCandidates(
+            List<Card> nonWildCards,
+            int maxWildCount,
+            List<GroupCandidate> candidates,
+            Set<String> seenCandidates
+    ) {
+        Map<Suit, List<Integer>> cardsBySuit = new EnumMap<>(Suit.class);
+        for (int i = 0; i < nonWildCards.size(); i++) {
+            cardsBySuit.computeIfAbsent(nonWildCards.get(i).getSuit(), ignored -> new ArrayList<>()).add(i);
+        }
 
-                long unusedWilds = wilds.stream().filter(card1 -> !card1.isBeingUsed()).count();
-                if (!cardGroups.isEmpty() && unusedWilds < 2) {
-                    card.setBeingUsed(true);
-                    cardGroups.get(0).cards.add(card);
-                } else {
-                    if (unusedWilds >= 2) {
-                        List<Card> l = deadwood.stream().filter(card1 -> !card1.isBeingUsed()).sorted(Comparator.comparing(Card::getCardRank)).collect(Collectors.toList());
-                        CardGroup group = new CardGroup(GroupType.MELD);
-                        group.cards.add(l.get(l.size()-1));
-                        l.get(l.size()-1).setBeingUsed(true);
-                        for (Card wildCard: wilds) {
-                            if (!wildCard.isBeingUsed()) {
-                                group.cards.add(wildCard);
-                                wildCard.setBeingUsed(true);
-                            }
-                        }
-                        cardGroups.add(group);
-                        break;
+        for (List<Integer> suitIndices : cardsBySuit.values()) {
+            suitIndices.sort(Comparator.comparingInt(index -> nonWildCards.get(index).getCardRank().getRank()));
+
+            for (int start = 0; start < suitIndices.size(); start++) {
+                int cardMask = 0;
+                int cardScore = 0;
+
+                for (int end = start; end < suitIndices.size(); end++) {
+                    int cardIndex = suitIndices.get(end);
+                    cardMask |= 1 << cardIndex;
+                    cardScore += nonWildCards.get(cardIndex).getScoreValue();
+
+                    int cardCount = end - start + 1;
+                    if (cardCount < MIN_GROUP_SIZE - 1) {
+                        continue;
                     }
 
+                    int firstRank = nonWildCards.get(suitIndices.get(start)).getCardRank().getRank();
+                    int lastRank = nonWildCards.get(suitIndices.get(end)).getCardRank().getRank();
+                    int gapWilds = (lastRank - firstRank + 1) - cardCount;
+                    int wildNeeded = Math.max(gapWilds, MIN_GROUP_SIZE - cardCount);
+
+                    if (wildNeeded > maxWildCount) {
+                        continue;
+                    }
+
+                    addCandidate(candidates, seenCandidates, GroupType.RUN, cardMask, wildNeeded, cardScore);
                 }
-
-
             }
+        }
+    }
+
+    private void addCandidate(
+            List<GroupCandidate> candidates,
+            Set<String> seenCandidates,
+            GroupType groupType,
+            int cardMask,
+            int wildNeeded,
+            int cardScore
+    ) {
+        String key = groupType + ":" + cardMask + ":" + wildNeeded;
+        if (seenCandidates.add(key)) {
+            candidates.add(new GroupCandidate(groupType, cardMask, wildNeeded, cardScore));
+        }
+    }
+
+    private SearchResult findBestGrouping(
+            List<Card> nonWildCards,
+            List<Card> availableWildCards,
+            List<GroupCandidate> groupCandidates
+    ) {
+        int[] wildScorePrefixSums = new int[availableWildCards.size() + 1];
+        for (int i = 0; i < availableWildCards.size(); i++) {
+            wildScorePrefixSums[i + 1] = wildScorePrefixSums[i] + availableWildCards.get(i).getScoreValue();
+        }
+
+        Map<SearchState, SearchResult> memo = new HashMap<>();
+        int remainingCardMask = (1 << nonWildCards.size()) - 1;
+        return searchBestGrouping(remainingCardMask, 0, groupCandidates, wildScorePrefixSums, memo);
+    }
+
+    private SearchResult searchBestGrouping(
+            int remainingCardMask,
+            int usedWildCount,
+            List<GroupCandidate> groupCandidates,
+            int[] wildScorePrefixSums,
+            Map<SearchState, SearchResult> memo
+    ) {
+        SearchState state = new SearchState(remainingCardMask, usedWildCount);
+        SearchResult cachedResult = memo.get(state);
+        if (cachedResult != null) {
+            return cachedResult;
+        }
+
+        SearchResult bestResult = new SearchResult(0, new ArrayList<>());
+        int availableWildCount = wildScorePrefixSums.length - 1 - usedWildCount;
+
+        for (GroupCandidate candidate : groupCandidates) {
+            if ((candidate.cardMask & remainingCardMask) != candidate.cardMask) {
+                continue;
+            }
+            if (candidate.wildNeeded > availableWildCount) {
+                continue;
+            }
+
+            SearchResult nextResult = searchBestGrouping(
+                    remainingCardMask ^ candidate.cardMask,
+                    usedWildCount + candidate.wildNeeded,
+                    groupCandidates,
+                    wildScorePrefixSums,
+                    memo
+            );
+
+            int totalScore = candidate.cardScore
+                    + getWildScore(wildScorePrefixSums, usedWildCount, candidate.wildNeeded)
+                    + nextResult.score;
+
+            if (totalScore > bestResult.score) {
+                List<GroupCandidate> selectedGroups = new ArrayList<>();
+                selectedGroups.add(candidate);
+                selectedGroups.addAll(nextResult.groups);
+                bestResult = new SearchResult(totalScore, selectedGroups);
+            }
+        }
+
+        memo.put(state, bestResult);
+        return bestResult;
+    }
+
+    private int getWildScore(int[] wildScorePrefixSums, int usedWildCount, int wildNeeded) {
+        return wildScorePrefixSums[usedWildCount + wildNeeded] - wildScorePrefixSums[usedWildCount];
+    }
+
+    private void applyGroupingResult(
+            SearchResult bestGrouping,
+            List<Card> nonWildCards,
+            List<Card> availableWildCards
+    ) {
+        int usedWildCount = 0;
+
+        for (GroupCandidate candidate : bestGrouping.groups) {
+            CardGroup group = new CardGroup(candidate.groupType);
+
+            for (int i = 0; i < nonWildCards.size(); i++) {
+                if ((candidate.cardMask & (1 << i)) == 0) {
+                    continue;
+                }
+                Card card = nonWildCards.get(i);
+                card.setBeingUsed(true);
+                group.cards.add(card);
+            }
+
+            for (int i = 0; i < candidate.wildNeeded; i++) {
+                Card wildCard = availableWildCards.get(usedWildCount++);
+                wildCard.setBeingUsed(true);
+                group.cards.add(wildCard);
+            }
+
+            group.setPoints(calculateGroupScore(group));
+            cardGroups.add(group);
+        }
+    }
+
+    private void placeUnusedWildCards(List<Card> availableWildCards) {
+        List<Card> unusedWildCards = availableWildCards.stream()
+                .filter(card -> !card.isBeingUsed())
+                .collect(Collectors.toList());
+
+        if (unusedWildCards.isEmpty()) {
+            return;
+        }
+
+        if (!cardGroups.isEmpty()) {
+            CardGroup firstGroup = cardGroups.get(0);
+            for (Card wildCard : unusedWildCards) {
+                wildCard.setBeingUsed(true);
+                firstGroup.cards.add(wildCard);
+            }
+            firstGroup.setPoints(calculateGroupScore(firstGroup));
+            return;
+        }
+
+        if (unusedWildCards.size() >= MIN_GROUP_SIZE) {
+            CardGroup wildGroup = new CardGroup(GroupType.WILD);
+            for (Card wildCard : unusedWildCards) {
+                wildCard.setBeingUsed(true);
+                wildGroup.cards.add(wildCard);
+            }
+            wildGroup.setPoints(calculateGroupScore(wildGroup));
+            cardGroups.add(wildGroup);
+            return;
+        }
+
+        List<Card> unusedNaturalCards = deadwood.stream()
+                .filter(card -> !card.isBeingUsed() && !card.isWild())
+                .sorted(Comparator.comparingInt(Card::getScoreValue).reversed())
+                .collect(Collectors.toList());
+
+        if (unusedWildCards.size() >= MIN_GROUP_SIZE - 1 && !unusedNaturalCards.isEmpty()) {
+            CardGroup meldGroup = new CardGroup(GroupType.MELD);
+            Card anchorCard = unusedNaturalCards.get(0);
+            anchorCard.setBeingUsed(true);
+            meldGroup.cards.add(anchorCard);
+            for (Card wildCard : unusedWildCards) {
+                wildCard.setBeingUsed(true);
+                meldGroup.cards.add(wildCard);
+            }
+            meldGroup.setPoints(calculateGroupScore(meldGroup));
+            cardGroups.add(meldGroup);
         }
     }
 
@@ -228,61 +325,110 @@ public class Hand {
         int deadwoodValue = 0;
         for (Card card : deadwood) {
             if (!card.isBeingUsed()) {
-                deadwoodValue = deadwoodValue + card.getScoreValue();
+                deadwoodValue += card.getScoreValue();
             }
         }
         return deadwoodValue;
     }
 
-    /**
-     * <p>
-     *     Goes through deadwood and copies the cards into "category" lists.
-     *     <br><br>
-     *     Categories: Wild, Hearts, Diamonds, Spades, & Clubs.
-     *     <br><br>
-     *     Sets all cards isBeingUsed to FALSE.
-     * <p>
-     */
-    private void organize() {
-        wilds    = extractWildCards();
-        hearts   = extractAllCardsWithSuit(Suit.HEARTS);
-        diamonds = extractAllCardsWithSuit(Suit.DIAMONDS);
-        clubs    = extractAllCardsWithSuit(Suit.CLUBS);
-        spades   = extractAllCardsWithSuit(Suit.SPADES);
+    private void organizeCards() {
+        wildCards = extractWildCards();
+        heartCards = extractCardsBySuit(Suit.HEARTS);
+        diamondCards = extractCardsBySuit(Suit.DIAMONDS);
+        clubCards = extractCardsBySuit(Suit.CLUBS);
+        spadeCards = extractCardsBySuit(Suit.SPADES);
 
-        hearts.sort(Comparator.comparing(Card::getCardRank));
-        clubs.sort(Comparator.comparing(Card::getCardRank));
-        diamonds.sort(Comparator.comparing(Card::getCardRank));
-        spades.sort(Comparator.comparing(Card::getCardRank));
+        heartCards.sort(Comparator.comparing(Card::getCardRank));
+        clubCards.sort(Comparator.comparing(Card::getCardRank));
+        diamondCards.sort(Comparator.comparing(Card::getCardRank));
+        spadeCards.sort(Comparator.comparing(Card::getCardRank));
         sortDeadwood();
+
         if (RenderEngine.shouldRender()) {
-            System.out.println(Ansi.RED+"Hearts: " + hearts.size() + " diamonds: " + diamonds.size() + " clubs: " + clubs.size() + " spades: " + spades.size() + " wilds: " + wilds.size()+Ansi.RESET);
+            System.out.println(
+                    Ansi.RED + "Hearts: " + heartCards.size()
+                            + " diamonds: " + diamondCards.size()
+                            + " clubs: " + clubCards.size()
+                            + " spades: " + spadeCards.size()
+                            + " wilds: " + wildCards.size() + Ansi.RESET
+            );
         }
+
         for (Card card : deadwood) {
             card.setBeingUsed(false);
         }
     }
 
-    /**
-     * Finds all the cards from deadwood that have matching Suit & returns them in a List.
-     * Any wilds that it finds are added the wilds list instead.
-     * <p>
-     * Does not remove any cards from deadwood.
-     * @param suit suit to match
-     * @return List with matching suit cards.
-     */
-    private List<Card> extractAllCardsWithSuit(Suit suit) {
-        List<Card> returnList = new ArrayList<>();
+    private List<Card> extractCardsBySuit(Suit suit) {
+        List<Card> suitedCards = new ArrayList<>();
         for (Card card : deadwood) {
-          if (card.getSuit().equals(suit) && !card.isWild()) {
-                returnList.add(card);
+            if (card.getSuit().equals(suit) && !card.isWild()) {
+                suitedCards.add(card);
             }
         }
-        return returnList;
+        return suitedCards;
     }
 
     private List<Card> extractWildCards() {
         return deadwood.stream().filter(Card::isWild).collect(Collectors.toList());
     }
 
+    private int calculateGroupScore(CardGroup group) {
+        return group.cards.stream().mapToInt(Card::getScoreValue).sum();
+    }
+
+    private static final class GroupCandidate {
+        private final GroupType groupType;
+        private final int cardMask;
+        private final int wildNeeded;
+        private final int cardScore;
+
+        private GroupCandidate(GroupType groupType, int cardMask, int wildNeeded, int cardScore) {
+            this.groupType = groupType;
+            this.cardMask = cardMask;
+            this.wildNeeded = wildNeeded;
+            this.cardScore = cardScore;
+        }
+
+        private int getCardScore() {
+            return cardScore;
+        }
+    }
+
+    private static final class SearchState {
+        private final int remainingMask;
+        private final int usedWildCount;
+
+        private SearchState(int remainingMask, int usedWildCount) {
+            this.remainingMask = remainingMask;
+            this.usedWildCount = usedWildCount;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) {
+                return true;
+            }
+            if (o == null || getClass() != o.getClass()) {
+                return false;
+            }
+            SearchState that = (SearchState) o;
+            return remainingMask == that.remainingMask && usedWildCount == that.usedWildCount;
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(remainingMask, usedWildCount);
+        }
+    }
+
+    private static final class SearchResult {
+        private final int score;
+        private final List<GroupCandidate> groups;
+
+        private SearchResult(int score, List<GroupCandidate> groups) {
+            this.score = score;
+            this.groups = groups;
+        }
+    }
 }

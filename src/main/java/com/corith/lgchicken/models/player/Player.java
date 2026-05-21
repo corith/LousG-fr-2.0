@@ -54,11 +54,12 @@ public abstract class Player implements Playable {
     }
 
     public void clearHand() {
-        getHand().setHearts(new ArrayList<>());
-        getHand().setDiamonds(new ArrayList<>());
-        getHand().setSpades(new ArrayList<>());
-        getHand().setClubs(new ArrayList<>());
+        getHand().setCardGroups(new ArrayList<>());
+        getHand().setHeartCards(new ArrayList<>());
+        getHand().setDiamondCards(new ArrayList<>());
+        getHand().setSpadeCards(new ArrayList<>());
+        getHand().setClubCards(new ArrayList<>());
         getHand().setDeadwood(new ArrayList<>());
-        getHand().setWilds(new ArrayList<>());
+        getHand().setWildCards(new ArrayList<>());
     }
 }

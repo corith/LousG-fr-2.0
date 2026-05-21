@@ -77,7 +77,6 @@ public class RenderEngine {
             for (Player p : sortedPlayers) {
                 System.out.println(p.getName() + "'s score: " + p.getScore());
             }
-            System.out.println("Cycled playplate: "+ new PlayPlate().getShuffleCount());
         }
     }
 

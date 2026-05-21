@@ -5,11 +5,12 @@ import com.corith.lgchicken.enums.Suit;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
-import java.util.EmptyStackException;
-import java.util.stream.Collectors;
+import java.util.NoSuchElementException;
 
 
 public class CardDeck {
+
+    private static final int JOKER_COUNT = 2;
 
     public Deque<Card> cards;
 
@@ -20,7 +21,7 @@ public class CardDeck {
     public CardDeck(int wildRank) {
         this.cards = getCleanDeck();
         for (Card c : cards) {
-            if (c.getCardRank().getRank() == wildRank) {
+            if (c.isJoker() || c.getCardRank().getRank() == wildRank) {
                 c.setWild(true);
             }
         }
@@ -28,16 +29,17 @@ public class CardDeck {
 
     private Deque<Card> getCleanDeck() {
         Deque<Card> freshCards = new ArrayDeque<>();
-        for (Suit suit : Suit.values()) {
-            if (!suit.equals(Suit.JOKER)) {
-                for (CardRank rank : CardRank.values()) {
-                    if (!rank.equals(CardRank.JOKER)) {
-                        Card cardToAdd = new Card(suit, rank);
-                        cardToAdd.setScoreValue(cardToAdd.getCardRank().getRank());
-                        freshCards.add(cardToAdd);
-                    }
-                }
+        for (Suit suit : new Suit[]{Suit.HEARTS, Suit.DIAMONDS, Suit.CLUBS, Suit.SPADES}) {
+            for (CardRank rank : new CardRank[]{
+                    CardRank.ACE, CardRank.TWO, CardRank.THREE, CardRank.FOUR, CardRank.FIVE,
+                    CardRank.SIX, CardRank.SEVEN, CardRank.EIGHT, CardRank.NINE, CardRank.TEN,
+                    CardRank.JACK, CardRank.QUEEN, CardRank.KING
+            }) {
+                freshCards.add(new Card(suit, rank));
             }
+        }
+        for (int i = 0; i < JOKER_COUNT; i++) {
+            freshCards.add(new Card(Suit.JOKER, CardRank.JOKER));
         }
         return freshCards;
     }
@@ -45,8 +47,8 @@ public class CardDeck {
     public Card getTopCard() {
         try {
             return cards.pop();
-        } catch (EmptyStackException e) {
-            throw new EmptyStackException();
+        } catch (NoSuchElementException e) {
+            throw new NoSuchElementException("Deck is empty");
         }
     }
 

@@ -44,7 +44,7 @@ public class PlayerTest {
 
         RenderEngine.renderHand(computer.getHand());
 
-        System.out.println("Will card be used? " + computer.willCardBeUsed(playPlate.discardCards.peek()));
+        System.out.println("Will card be used? " + computer.wouldUseCard(playPlate.discardCards.peek()));
         System.out.println(playPlate.discardCards.peek().prettyPrint(true));
     }
 
@@ -79,7 +79,7 @@ public class PlayerTest {
         Assert.assertEquals(13, userPlayer.getHand().deadwood.size());
         Assert.assertEquals(13, userPlayer1.getHand().deadwood.size());
         Assert.assertEquals(13, userPlayer2.getHand().deadwood.size());
-        Assert.assertEquals(13, standardDeck.cards.size());
+        Assert.assertEquals(15, standardDeck.cards.size());
     }
 
     @Test

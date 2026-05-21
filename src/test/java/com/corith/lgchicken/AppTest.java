@@ -15,10 +15,10 @@ public class AppTest {
         int targetRuns = 1;
         while (run < targetRuns) {
             String message = "Cycled " + run + " times.";
-            Assert.assertEquals(message,"Game Over.", PlayWizard.playLoop());
-            Assert.assertEquals(14, PlayWizard.cardLimit);
+            PlayWizard playWizard = new PlayWizard(3);
+            Assert.assertEquals(message,"Game Over.", playWizard.runGame());
+            Assert.assertEquals(14, playWizard.getCurrentCardLimit());
             run++;
-            PlayWizard.cardLimit = 3;
         }
         System.out.println(Ansi.HIGH_INTENSITY+Ansi.MAGENTA+"Cycled " + run + " times."+Ansi.RESET);
     }
